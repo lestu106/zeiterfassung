@@ -1,0 +1,2551 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <title>PlanProtect Zeiterfassung</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #E0E0E0; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React via CDN -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Babel for JSX transformation in-browser -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+// ─── Konstanten ───────────────────────────────────────────────────────────────
+const TYPES = ["Hinfahrt", "Rückfahrt", "Installation", "Service", "Pause", "Sonstiges"];
+const TYPE_COLORS = {
+  "Hinfahrt":     "#4A90D9",
+  "Rückfahrt":    "#5BA85A",
+  "Installation": "#bdbd00",
+  "Service":      "#E07B39",
+  "Pause":        "#9B72CF",
+  "Sonstiges":    "#7A8A99",
+};
+const TYPE_ICONS = {
+  "Hinfahrt":     "→",
+  "Rückfahrt":    "←",
+  "Installation": "⚒",
+  "Service":      "✦",
+  "Pause":        "◷",
+  "Sonstiges":    "•",
+};
+const ANLAGEN = [
+  "– bitte wählen –",
+  "38241 – Müller GmbH",
+  "31756 – Schneider AG",
+  "34902 – Weber & Söhne",
+  "36083 – Fischer Logistik",
+  "39514 – Baumann GmbH",
+  "32678 – Lorenz AG",
+  "35129 – Huber Technik",
+];
+
+const ORDER_COLORS = {
+  "Installation": "#bdbd00",
+  "Service":      "#E07B39",
+  "Umzug":        "#4A90D9",
+  "Übernahme":    "#9B72CF",
+};
+
+const AUFTRAEGE = [
+  {
+    anlage: "38241",
+    objekt: "Wohnanlage Parkstraße",
+    kunde: "Müller GmbH",
+    ort: "Mönchengladbach",
+    typ: "Installation",
+    startH: 7, startM: 0, endH: 9, endM: 30,
+    adresse: "Industriestr. 14, 41063 Mönchengladbach",
+    ansprechpartner: "Thomas Müller",
+    tel: "+49 2161 4820-0",
+  },
+  {
+    anlage: "31756",
+    objekt: "Bürokomplex Nordpark",
+    kunde: "Schneider AG",
+    ort: "Düsseldorf",
+    typ: "Service",
+    startH: 10, startM: 0, endH: 11, endM: 30,
+    adresse: "Kaiserswerther Str. 101, 40474 Düsseldorf",
+    ansprechpartner: "Sandra Bauer",
+    tel: "+49 211 9034-55",
+  },
+  {
+    anlage: "34902",
+    objekt: "Lagerhalle West",
+    kunde: "Weber & Söhne",
+    ort: "Krefeld",
+    typ: "Umzug",
+    startH: 12, startM: 30, endH: 15, endM: 0,
+    adresse: "Uerdinger Str. 88, 47800 Krefeld",
+    ansprechpartner: "Frank Weber",
+    tel: "+49 2151 7720-12",
+  },
+  {
+    anlage: "36083",
+    objekt: "Logistikzentrum Am Hafen",
+    kunde: "Fischer Logistik",
+    ort: "Neuss",
+    typ: "Übernahme",
+    startH: 15, startM: 30, endH: 17, endM: 0,
+    adresse: "Hafenstr. 22, 41460 Neuss",
+    ansprechpartner: "Petra Fischer",
+    tel: "+49 2131 6610-3",
+  },
+];
+
+const LOGO_B64 = "data:image/png;base64,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";
+
+// ─── Hilfsfunktionen ──────────────────────────────────────────────────────────
+const fmt2 = (n) => String(n).padStart(2, "0");
+const fmtHHMM = (h, m) => `${fmt2(h)}:${fmt2(m)}`;
+const fmtHMS = (s) => `${fmt2(Math.floor(s/3600))}:${fmt2(Math.floor((s%3600)/60))}:${fmt2(s%60)}`;
+const fmtHM = (s) => { const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return `${h}h ${fmt2(m)}m`; };
+const toMin = (t) => { const [h,m]=t.split(":").map(Number); return h*60+m; };
+const nowHHMM = () => new Date().toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"});
+
+const TODAY_STR = "Freitag, 29. Mai 2026";
+const INITIAL_ENTRIES = [
+  { id:1, type:"Hinfahrt",     start:"07:00", end:"07:45", duration:2700, note:"Kunde Müller GmbH", anlage:"–" },
+  { id:2, type:"Installation", start:"08:00", end:"10:30", duration:9000, note:"Halle 2",    anlage:"38241 – Müller GmbH" },
+  { id:3, type:"Pause",        start:"10:30", end:"11:00", duration:1800, note:"–",                 anlage:"–" },
+];
+
+// ─── DrumPicker (iOS-Stil) ────────────────────────────────────────────────────
+function DrumPicker({ value, onChange, items, width = 80 }) {
+  const ITEM_H  = 44;
+  const VISIBLE = 5;          // odd number → clear centre
+  const PAD     = Math.floor(VISIBLE / 2);   // = 2
+
+  // Find initial index; fallback to 0 so minutes like "30" are found correctly
+  const findIdx = (v) => {
+    const i = items.findIndex(x => x === v);
+    return i >= 0 ? i : 0;
+  };
+
+  const [idx, setIdx]       = useState(() => findIdx(value));
+  const [drag, setDrag]     = useState(null);  // { startY, startIdx } while dragging
+  const [offset, setOffset] = useState(0);     // fractional px offset during drag
+
+  // Sync if parent resets value (e.g. opening a different entry)
+  const prevValue = useRef(value);
+  useEffect(() => {
+    if (prevValue.current !== value && drag === null) {
+      const ni = findIdx(value);
+      setIdx(ni);
+      setOffset(0);
+    }
+    prevValue.current = value;
+  }, [value, drag]);
+
+  const clamp = (i) => Math.max(0, Math.min(items.length - 1, i));
+
+  /* ── Drag helpers ── */
+  const startDrag = (clientY) =>
+    setDrag({ startY: clientY, startIdx: idx });
+
+  const moveDrag = (clientY) => {
+    if (!drag) return;
+    const delta = drag.startY - clientY;          // positive = scroll up = higher index
+    const moved = Math.round(delta / ITEM_H);
+    const ni    = clamp(drag.startIdx + moved);
+    const rem   = delta - moved * ITEM_H;         // sub-item fractional offset
+    setIdx(ni);
+    setOffset(rem);                               // smooth visual drag
+  };
+
+  const endDrag = () => {
+    if (!drag) return;
+    setDrag(null);
+    setOffset(0);
+    onChange(items[idx]);                         // commit only on release
+  };
+
+  /* ── Pointer (mouse / stylus) ── */
+  const onPD = (e) => { e.currentTarget.setPointerCapture(e.pointerId); startDrag(e.clientY); };
+  const onPM = (e) => moveDrag(e.clientY);
+  const onPU = ()  => endDrag();
+
+  /* ── Touch ── */
+  const onTS = (e) => startDrag(e.touches[0].clientY);
+  const onTM = (e) => { e.preventDefault(); moveDrag(e.touches[0].clientY); };
+  const onTE = ()  => endDrag();
+
+  /* ── Tap on any row ── */
+  const onTap = (e, realIdx) => {
+    e.stopPropagation();
+    if (realIdx < 0 || realIdx >= items.length) return;
+    setIdx(realIdx);
+    setOffset(0);
+    onChange(items[realIdx]);
+  };
+
+  // translateY: item at idx lands exactly on the centre stripe
+  const translateY = (PAD - idx) * ITEM_H - offset;
+  const padded = [
+    ...Array(PAD).fill(null),
+    ...items,
+    ...Array(PAD).fill(null),
+  ];
+
+  return (
+    <div
+      style={{ width: width, height: ITEM_H * VISIBLE, overflow:"hidden", position:"relative",
+               touchAction:"none", userSelect:"none", cursor:"ns-resize" }}
+      onPointerDown={onPD} onPointerMove={onPM} onPointerUp={onPU}
+      onTouchStart={onTS}  onTouchMove={onTM}   onTouchEnd={onTE}
+    >
+      {/* Top fade */}
+      <div style={{ position:"absolute", top:0, left:0, right:0, height: ITEM_H * PAD,
+        background:"linear-gradient(to bottom,rgba(242,242,247,.97),rgba(242,242,247,0))",
+        zIndex:3, pointerEvents:"none" }}/>
+      {/* Bottom fade */}
+      <div style={{ position:"absolute", bottom:0, left:0, right:0, height: ITEM_H * PAD,
+        background:"linear-gradient(to top,rgba(242,242,247,.97),rgba(242,242,247,0))",
+        zIndex:3, pointerEvents:"none" }}/>
+      {/* Centre selection stripe – FIXED, never moves */}
+      <div style={{ position:"absolute", top: ITEM_H * PAD, left:6, right:6, height: ITEM_H,
+        borderTop:"0.5px solid rgba(0,0,0,0.14)", borderBottom:"0.5px solid rgba(0,0,0,0.14)",
+        borderRadius:10, background:"rgba(0,0,0,0.045)", zIndex:2, pointerEvents:"none" }}/>
+      {/* Scrolling list */}
+      <div style={{ display:"flex", flexDirection:"column",
+                    transform:`translateY(${translateY}px)`,
+                    willChange:"transform" }}>
+        {padded.map((v, i) => {
+          const realIdx  = i - PAD;          // index in items[]
+          const isCentre = realIdx === idx;
+          return (
+            <div key={i}
+              style={{ height: ITEM_H, display:"flex", alignItems:"center",
+                       justifyContent:"center", letterSpacing:-0.5,
+                       fontFamily:"-apple-system, Helvetica, sans-serif",
+                       fontSize:   isCentre ? 24 : 19,
+                       fontWeight: isCentre ? 600  : 400,
+                       color:      isCentre ? "#000" : "rgba(0,0,0,0.28)",
+                       pointerEvents: v !== null ? "auto" : "none",
+                       cursor: v !== null ? "pointer" : "default" }}
+              onClick={(e) => v !== null && onTap(e, realIdx)}
+            >
+              {v !== null ? fmt2(v) : ""}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Haupt-App ────────────────────────────────────────────────────────────────
+export default function ZeiterfassungApp() {
+  const [tab, setTab] = useState("home");
+
+  // Timer
+  const [running, setRunning] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [selType, setSelType] = useState("Installation");
+  const [note, setNote] = useState("");
+  const [anlage, setAnlage] = useState(ANLAGEN[0]);
+  const [startTime, setStartTime] = useState(null);
+  const [saved, setSaved] = useState(false);
+  const [liveEnd, setLiveEnd] = useState("");
+  const intervalRef = useRef(null);
+
+  // Einträge
+  const [entries, setEntries] = useState(INITIAL_ENTRIES);
+
+  // Bearbeitungs-Sheet
+  const [editEntry, setEditEntry] = useState(null);
+  const [editField, setEditField] = useState("start");
+  const [editSH, setEditSH] = useState(0);
+  const [editSM, setEditSM] = useState(0);
+  const [editEH, setEditEH] = useState(0);
+  const [editEM, setEditEM] = useState(0);
+  const [editError, setEditError] = useState("");
+
+  // Stats
+  const [statsMode, setStatsMode] = useState("tag");
+  const [statsOffset, setStatsOffset] = useState(0);
+  const [logDayOffset, setLogDayOffset] = useState(0); // 0=heute, -1=gestern …
+  const [auftragDayOffset, setAuftragDayOffset] = useState(0); // 0=heute
+  const [selectedAuftrag, setSelectedAuftrag] = useState(null);
+  const [subPage, setSubPage] = useState(null); // "material" | "zeichnung"
+  const [showMaterialSheet, setShowMaterialSheet] = useState(false);
+  const [showZeichnungSheet, setShowZeichnungSheet] = useState(false);
+  const [showNewEntrySheet, setShowNewEntrySheet] = useState(false);
+  const [showQuickEntrySheet, setShowQuickEntrySheet] = useState(false);
+  const [newType, setNewType]   = useState(TYPES[0]);
+  const [newAnlage, setNewAnlage] = useState(ANLAGEN[0]);
+  const [newSH, setNewSH] = useState(8);
+  const [newSM, setNewSM] = useState(0);
+  const [newEH, setNewEH] = useState(9);
+  const [newEM, setNewEM] = useState(0);
+  const [newNote, setNewNote] = useState("");
+  const [newError, setNewError] = useState("");
+
+  // ── Timer ──
+  useEffect(() => {
+    if (running) {
+      intervalRef.current = setInterval(() => {
+        setElapsed(e => e+1);
+        setLiveEnd(nowHHMM());
+      }, 1000);
+    } else clearInterval(intervalRef.current);
+    return () => clearInterval(intervalRef.current);
+  }, [running]);
+
+  const handleStartStop = () => {
+    if (!running) { setStartTime(nowHHMM()); setLiveEnd(nowHHMM()); setElapsed(0); setSaved(false); }
+    setRunning(r => !r);
+  };
+  const handleSave = () => {
+    if (!elapsed) return;
+    setEntries(prev => [{ id:Date.now(), type:selType, start:startTime, end:nowHHMM(),
+      duration:elapsed, note:note||"–", anlage:anlage===ANLAGEN[0]?"–":anlage }, ...prev]);
+    setElapsed(0); setNote(""); setAnlage(ANLAGEN[0]); setRunning(false);
+    setSaved(true); setTimeout(()=>setSaved(false), 2000);
+  };
+
+  // ── Edit ──
+  const openEdit = (e) => {
+    const [sh,sm] = e.start.split(":").map(Number);
+    const [eh,em] = e.end.split(":").map(Number);
+    // Round minutes to nearest 5 so they exist in the mins array [0,5,10,...,55]
+    const snapM = (m) => Math.round(m / 5) * 5 % 60;
+    setEditEntry(e); setEditSH(sh); setEditSM(snapM(sm)); setEditEH(eh); setEditEM(snapM(em));
+    setEditField("start"); setEditError("");
+  };
+  const saveEdit = () => {
+    const ns = editSH*60+editSM, ne = editEH*60+editEM;
+    if (ne <= ns) { setEditError("Endzeit muss nach der Startzeit liegen."); return; }
+    const conflict = entries.find(e => {
+      if (e.id === editEntry.id) return false;
+      const s=toMin(e.start), en=toMin(e.end);
+      return ns < en && ne > s;
+    });
+    if (conflict) { setEditError(`Überschneidung mit „${conflict.type}" (${conflict.start}–${conflict.end}).`); return; }
+    const dur = (ne-ns)*60;
+    setEntries(prev => prev.map(e => e.id===editEntry.id
+      ? {...e, start:fmtHHMM(editSH,editSM), end:fmtHHMM(editEH,editEM), duration:dur} : e));
+    setEditEntry(null);
+  };
+
+  // ── Berechnungen ──
+  const saveNewEntry = () => {
+    const ns = newSH * 60 + newSM;
+    const ne = newEH * 60 + newEM;
+    if (ne <= ns) { setNewError("Endzeit muss nach der Startzeit liegen."); return; }
+    const conflict = entries.find(e => {
+      const s = toMin(e.start), en = toMin(e.end);
+      return ns < en && ne > s;
+    });
+    if (conflict) { setNewError(`Überschneidung mit „${conflict.type}" (${conflict.start}–${conflict.end}).`); return; }
+    const dur = (ne - ns) * 60;
+    setEntries(prev => [...prev, {
+      id: Date.now(),
+      type: newType,
+      start: fmtHHMM(newSH, newSM),
+      end:   fmtHHMM(newEH, newEM),
+      duration: dur,
+      note: newNote || "–",
+      anlage: newAnlage === ANLAGEN[0] ? "–" : newAnlage,
+    }].sort((a, b) => toMin(a.start) - toMin(b.start)));
+    setShowNewEntrySheet(false);
+    setNewNote(""); setNewError(""); setNewAnlage(ANLAGEN[0]);
+  };
+
+  const totalToday = entries.reduce((s,e)=>s+e.duration,0)+(running?elapsed:0);
+
+  const TODAY = new Date(2026,4,29);
+  const statsPeriodLabel = (() => {
+    if (statsMode==="tag") {
+      if (statsOffset===0) return "Heute";
+      if (statsOffset===-1) return "Gestern";
+      const d=new Date(TODAY); d.setDate(d.getDate()+statsOffset);
+      return d.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"});
+    }
+    const d=new Date(TODAY.getFullYear(),TODAY.getMonth()+statsOffset,1);
+    return d.toLocaleDateString("de-DE",{month:"long",year:"numeric"});
+  })();
+  const statsTotalSec = statsOffset===0 ? totalToday : Math.max(0,28800+statsOffset*3600);
+  const statsTotals = {};
+  TYPES.forEach(p => {
+    statsTotals[p] = statsOffset===0
+      ? entries.filter(e=>e.type===p).reduce((s,e)=>s+e.duration,0)
+      : (p==="Installation"?Math.abs(statsOffset)*2700:p==="Service"?Math.abs(statsOffset)*900:0);
+  });
+  const statsMax = Math.max(...Object.values(statsTotals),1);
+
+  // ─── iOS Design System (Light / Corporate) ───────────────────────────────────
+  const CD = "#bdbd00";          // PlanProtect Corporate Design
+  const CD_DARK = "#9a9a00";     // Dunklerer Ton für Hover/Border
+  const CD_LIGHT = "#f5f5d0";    // Heller Hintergrund-Ton
+
+  const IOS = {
+    bg:        "#F2F2F7",          // iOS Light Systemhintergrund
+    bg2:       "#FFFFFF",          // Karten-Hintergrund
+    bg3:       "#E5E5EA",          // Tertiärer Hintergrund
+    separator: "rgba(0,0,0,0.1)",
+    label:     "#000000",
+    label2:    "rgba(0,0,0,0.55)",
+    label3:    "rgba(0,0,0,0.35)",
+    accent:    CD,
+    green:     "#34C759",
+    red:       "#FF3B30",
+    font:      "-apple-system, Helvetica Neue, sans-serif",
+    fontDisplay: "-apple-system, Helvetica Neue, sans-serif",
+    mono:      "SF Mono, Menlo, monospace",
+  };
+
+  const hours = Array.from({length:24},(_,i)=>i);
+  const mins  = Array.from({length:12},(_,i)=>i*5);
+
+  // ─── JSX ─────────────────────────────────────────────────────────────────────
+  return (
+    <div style={{minHeight:"100vh",background:"#E0E0E0",display:"flex",justifyContent:"center",
+      alignItems:"center",fontFamily:IOS.font}}>
+      <style>{`
+        * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+        body { background:#E0E0E0; }
+
+        .ios-phone {
+          width: 393px;
+          height: 852px;
+          background: ${IOS.bg};
+          border-radius: 54px;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          position: relative;
+          box-shadow: 0 60px 120px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(0,0,0,0.1);
+        }
+
+        /* Dynamic Island */
+        .dynamic-island {
+          position: absolute;
+          top: 12px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 126px;
+          height: 37px;
+          background: #1a1a1a;
+          border-radius: 20px;
+          z-index: 50;
+        }
+
+        /* Status bar */
+        .ios-status {
+          height: 59px;
+          display: flex;
+          align-items: flex-end;
+          padding: 0 28px 8px;
+          justify-content: space-between;
+          flex-shrink: 0;
+          position: relative;
+          z-index: 10;
+        }
+        .ios-status-time {
+          font-family: -apple-system, "Helvetica Neue", sans-serif;
+          font-size: 15px;
+          font-weight: 600;
+          color: ${IOS.label};
+          letter-spacing: -0.3px;
+        }
+        .ios-status-icons {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          color: ${IOS.label};
+          font-size: 12px;
+        }
+        .ios-header {
+          padding: 4px 20px 8px;
+          flex-shrink: 0;
+        }
+        .ios-large-title {
+          font-family: -apple-system, "Helvetica Neue", sans-serif;
+          font-size: 34px;
+          font-weight: 700;
+          color: ${IOS.label};
+          letter-spacing: -0.5px;
+          line-height: 1.1;
+        }
+        .ios-header-sub {
+          font-size: 13px;
+          color: ${IOS.label3};
+          margin-top: 1px;
+          letter-spacing: 0.1px;
+        }
+
+        /* Scrollable content */
+        .ios-content {
+          flex: 1;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          padding: 0 0 8px;
+          scrollbar-width: none;
+        }
+        .ios-content::-webkit-scrollbar { display: none; }
+
+        /* Section header (like iOS grouped list) */
+        .ios-section-header {
+          font-family: -apple-system, "Helvetica Neue", sans-serif;
+          font-size: 13px;
+          font-weight: 400;
+          color: ${IOS.label2};
+          text-transform: uppercase;
+          letter-spacing: 0.4px;
+          padding: 18px 20px 6px;
+        }
+
+        /* iOS grouped card */
+        .ios-card {
+          background: ${IOS.bg2};
+          border-radius: 12px;
+          margin: 0 16px;
+          overflow: hidden;
+        }
+        .ios-row {
+          display: flex;
+          align-items: center;
+          padding: 12px 16px;
+          min-height: 44px;
+          position: relative;
+          cursor: pointer;
+          transition: background 0.1s;
+          -webkit-tap-highlight-color: rgba(0,0,0,0.05);
+        }
+        .ios-row:active { background: rgba(0,0,0,0.04); }
+        .ios-row + .ios-row::before {
+          content: '';
+          position: absolute;
+          top: 0; left: 16px; right: 0;
+          height: 0.5px;
+          background: ${IOS.separator};
+        }
+        .ios-row-icon {
+          width: 30px;
+          height: 30px;
+          border-radius: 7px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 15px;
+          font-weight: 700;
+          margin-right: 12px;
+          flex-shrink: 0;
+          color: #bdbd00;
+        }
+        .ios-row-label {
+          flex: 1;
+          font-size: 17px;
+          color: ${IOS.label};
+          letter-spacing: -0.2px;
+        }
+        .ios-row-value {
+          font-size: 17px;
+          color: ${IOS.label2};
+          letter-spacing: -0.2px;
+        }
+        .ios-row-chevron {
+          color: rgba(0,0,0,0.25);
+          font-size: 13px;
+          margin-left: 6px;
+          font-weight: 600;
+        }
+
+        /* Segmented control */
+        .ios-segmented {
+          display: flex;
+          background: rgba(0,0,0,0.08);
+          border-radius: 9px;
+          padding: 2px;
+          margin: 0 16px 0;
+        }
+        .ios-seg-btn {
+          flex: 1;
+          padding: 6px 0;
+          border-radius: 7px;
+          border: none;
+          background: none;
+          font-family: -apple-system, "Helvetica Neue", sans-serif;
+          font-size: 13px;
+          font-weight: 500;
+          color: rgba(0,0,0,0.5);
+          cursor: pointer;
+          transition: all 0.2s;
+          letter-spacing: -0.1px;
+        }
+        .ios-seg-btn.active {
+          background: #fff;
+          color: #000;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        }
+
+        /* Inline picker for type selection */
+        .type-scroll {
+          display: flex;
+          gap: 8px;
+          padding: 2px 16px 4px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+        }
+        .type-scroll::-webkit-scrollbar { display: none; }
+        .type-chip {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 14px;
+          border-radius: 20px;
+          white-space: nowrap;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          border: 1px solid rgba(0,0,0,0.1);
+          background: ${IOS.bg2};
+          color: ${IOS.label2};
+          transition: all 0.15s;
+          flex-shrink: 0;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .type-chip.active {
+          border-color: transparent;
+          color: #000;
+        }
+        .type-chip:active { opacity: 0.7; }
+
+        /* Timer display */
+        .timer-big {
+          font-family: "SF Mono", "Menlo", monospace;
+          font-size: 64px;
+          font-weight: 200;
+          color: ${IOS.label};
+          letter-spacing: -3px;
+          text-align: center;
+          padding: 24px 0 20px;
+          line-height: 1;
+        }
+
+        /* iOS button */
+        .ios-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: none;
+          border-radius: 14px;
+          font-family: -apple-system, "Helvetica Neue", sans-serif;
+          font-size: 17px;
+          font-weight: 600;
+          cursor: pointer;
+          padding: 15px;
+          letter-spacing: -0.2px;
+          transition: opacity 0.15s;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .ios-btn:active { opacity: 0.75; }
+        .ios-btn-green  { background: ${CD}; color: #000; font-weight: 700; }
+        .ios-btn-red    { background: ${IOS.red};    color: #fff; }
+        .ios-btn-blue   { background: ${CD}; color: #000; font-weight: 700; }
+        .ios-btn-ghost  {
+          background: ${IOS.bg2};
+          color: ${CD};
+          border: none;
+        }
+
+        /* Tab bar */
+        .ios-tabbar {
+          background: rgba(249,249,249,0.94);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border-top: 0.5px solid rgba(0,0,0,0.15);
+          display: flex;
+          padding: 8px 0 20px;
+          flex-shrink: 0;
+        }
+        .ios-tab {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 3px;
+          border: none;
+          background: none;
+          cursor: pointer;
+          padding: 4px 0;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .ios-tab-icon {
+          font-size: 22px;
+          line-height: 1;
+          transition: transform 0.15s;
+        }
+        .ios-tab:active .ios-tab-icon { transform: scale(0.85); }
+        .ios-tab-label {
+          font-size: 10px;
+          font-weight: 500;
+          letter-spacing: 0.2px;
+          font-family: -apple-system, "Helvetica Neue", sans-serif;
+        }
+
+        /* Home stats */
+        .home-stats-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          padding: 0 16px;
+        }
+        .home-stat-card {
+          background: ${IOS.bg2};
+          border-radius: 14px;
+          padding: 16px;
+        }
+        .home-stat-emoji { font-size: 22px; margin-bottom: 8px; }
+        .home-stat-val {
+          font-family: -apple-system, "Helvetica Neue", sans-serif;
+          font-size: 22px;
+          font-weight: 700;
+          color: ${IOS.label};
+          letter-spacing: -0.5px;
+        }
+        .home-stat-lbl {
+          font-size: 12px;
+          color: ${IOS.label3};
+          margin-top: 2px;
+          letter-spacing: 0.1px;
+        }
+
+        /* Live badge */
+        .live-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          background: rgba(255,69,58,0.2);
+          border-radius: 20px;
+          padding: 3px 10px 3px 8px;
+          font-size: 12px;
+          font-weight: 600;
+          color: ${IOS.red};
+          margin-left: 10px;
+        }
+        .live-dot {
+          width: 6px; height: 6px;
+          border-radius: 50%;
+          background: ${IOS.red};
+          animation: livepulse 1s ease-in-out infinite;
+        }
+        @keyframes livepulse {
+          0%,100% { opacity:1; transform:scale(1); }
+          50%      { opacity:0.4; transform:scale(0.7); }
+        }
+
+        /* Toast */
+        .ios-toast {
+          position: absolute;
+          top: 70px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(44,44,46,0.95);
+          backdrop-filter: blur(20px);
+          color: #fff;
+          font-size: 14px;
+          font-weight: 500;
+          padding: 10px 20px;
+          border-radius: 20px;
+          white-space: nowrap;
+          z-index: 200;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+          opacity: 0;
+          transition: opacity 0.25s;
+          pointer-events: none;
+        }
+        .ios-toast.show { opacity: 1; }
+
+        /* Edit Sheet */
+        .sheet-overlay {
+          position: absolute;
+          inset: 0;
+          background: rgba(0,0,0,0.35);
+          z-index: 100;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-end;
+          border-radius: 54px;
+          overflow: hidden;
+        }
+        .sheet {
+          background: #F2F2F7;
+          border-radius: 20px 20px 0 0;
+          padding-bottom: 34px;
+        }
+        .sheet-handle {
+          width: 36px; height: 5px;
+          background: rgba(0,0,0,0.2);
+          border-radius: 99px;
+          margin: 10px auto 0;
+        }
+        .sheet-title-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 14px 20px 0;
+        }
+        .sheet-cancel {
+          font-size: 17px;
+          color: ${CD};
+          border: none;
+          background: none;
+          cursor: pointer;
+          font-family: -apple-system, "Helvetica Neue", sans-serif;
+          padding: 4px 0;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .sheet-done {
+          font-size: 17px;
+          font-weight: 600;
+          color: ${CD};
+          border: none;
+          background: none;
+          cursor: pointer;
+          font-family: -apple-system, "Helvetica Neue", sans-serif;
+          padding: 4px 0;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .sheet-title {
+          font-size: 17px;
+          font-weight: 600;
+          color: ${IOS.label};
+          letter-spacing: -0.3px;
+        }
+        .drum-section {
+          padding: 8px 20px 4px;
+        }
+        .drum-field-label {
+          font-size: 13px;
+          color: ${IOS.label3};
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 4px;
+        }
+        .drum-row {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 4px;
+          background: #E5E5EA;
+          border-radius: 12px;
+          padding: 0 12px;
+        }
+        .drum-colon {
+          font-family: "SF Mono", "Menlo", monospace;
+          font-size: 26px;
+          font-weight: 300;
+          color: ${IOS.label2};
+          margin-top: -2px;
+        }
+        .field-seg {
+          display: flex;
+          background: rgba(0,0,0,0.06);
+          border-radius: 9px;
+          padding: 2px;
+          margin: 10px 20px 6px;
+          gap: 2px;
+        }
+        .field-seg-btn {
+          flex: 1;
+          padding: 7px 0;
+          border-radius: 7px;
+          border: none;
+          background: none;
+          font-family: -apple-system, "Helvetica Neue", sans-serif;
+          font-size: 14px;
+          font-weight: 500;
+          color: ${IOS.label2};
+          cursor: pointer;
+          transition: all 0.15s;
+        }
+        .field-seg-btn.active {
+          background: #fff;
+          color: ${IOS.label};
+        }
+        .edit-error-box {
+          margin: 8px 20px 0;
+          padding: 11px 14px;
+          background: rgba(255,59,48,0.1);
+          border: 0.5px solid rgba(255,59,48,0.35);
+          border-radius: 12px;
+          font-size: 13px;
+          color: ${IOS.red};
+          line-height: 1.4;
+        }
+
+        /* Material Quick-Sheet */
+        .mat-sheet-overlay {
+          position: absolute;
+          inset: 0;
+          background: rgba(0,0,0,0.3);
+          z-index: 90;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-end;
+          border-radius: 54px;
+          overflow: hidden;
+          animation: fadeIn 0.2s ease;
+        }
+        .mat-sheet {
+          background: #fff;
+          border-radius: 20px 20px 0 0;
+          padding-bottom: 32px;
+          max-height: 75%;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
+          animation: slideUp 0.3s cubic-bezier(0.32,0.72,0,1);
+        }
+        @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+        @keyframes slideUp { from { transform:translateY(100%) } to { transform:translateY(0) } }
+        .mat-item-row {
+          display: flex;
+          align-items: center;
+          padding: 12px 20px;
+          border-bottom: 0.5px solid rgba(0,0,0,0.07);
+          gap: 12px;
+        }
+        .mat-item-qty {
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
+          background: rgba(189,189,0,0.12);
+          border: 1px solid rgba(189,189,0,0.3);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: "SF Mono", "Menlo", monospace;
+          font-size: 13px;
+          font-weight: 700;
+          color: ${CD};
+          flex-shrink: 0;
+        }
+
+        /* Summary stripe */
+        .time-summary {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          gap: 12px;
+          padding: 8px 0 2px;
+        }
+        .time-summary-item {
+          text-align: center;
+        }
+        .time-summary-val {
+          font-family: "SF Mono", "Menlo", monospace;
+          font-size: 17px;
+          font-weight: 500;
+          color: ${IOS.label};
+          letter-spacing: -0.5px;
+        }
+        .time-summary-lbl {
+          font-size: 11px;
+          color: ${IOS.label3};
+          letter-spacing: 0.3px;
+          margin-top: 1px;
+        }
+        .time-summary-sep {
+          font-size: 20px;
+          color: ${IOS.label3};
+        }
+
+        /* Progress bar */
+        .ios-progress-track {
+          height: 6px;
+          background: rgba(255,255,255,0.1);
+          border-radius: 99px;
+          overflow: hidden;
+          margin: 8px 16px 0;
+        }
+        .ios-progress-fill {
+          height: 100%;
+          border-radius: 99px;
+          transition: width 0.6s ease;
+        }
+
+        /* Period nav */
+        .period-nav-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 10px 16px;
+          background: ${IOS.bg2};
+          border-radius: 12px;
+          margin: 0 16px;
+        }
+        .period-arrow-btn {
+          width: 32px; height: 32px;
+          border: none;
+          background: rgba(0,0,0,0.06);
+          border-radius: 50%;
+          color: ${CD};
+          font-size: 18px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .period-arrow-btn:disabled { opacity: 0.25; cursor: default; }
+        .period-nav-label {
+          font-size: 15px;
+          font-weight: 600;
+          color: ${IOS.label};
+          letter-spacing: -0.3px;
+        }
+
+        /* Bar chart */
+        .bar-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 0 16px;
+          margin-bottom: 10px;
+        }
+        .bar-type-label {
+          font-size: 12px;
+          color: ${IOS.label2};
+          width: 76px;
+          flex-shrink: 0;
+        }
+        .bar-track {
+          flex: 1;
+          height: 6px;
+          background: rgba(255,255,255,0.08);
+          border-radius: 99px;
+          overflow: hidden;
+        }
+        .bar-fill { height:100%; border-radius:99px; transition: width 0.5s ease; }
+        .bar-val {
+          font-family: "SF Mono", "Menlo", monospace;
+          font-size: 11px;
+          color: ${IOS.label3};
+          width: 44px;
+          text-align: right;
+          flex-shrink: 0;
+        }
+
+        select option { background: #1C1C1E; }
+
+        /* ── AUFTRÄGE / Kalender ── */
+        .cal-wrap {
+          position: relative;
+          display: flex;
+          padding: 0 16px;
+        }
+        .cal-time-col {
+          width: 44px;
+          flex-shrink: 0;
+          position: relative;
+        }
+        .cal-time-label {
+          font-family: "SF Mono", "Menlo", monospace;
+          font-size: 11px;
+          color: rgba(0,0,0,0.4);
+          text-align: right;
+          padding-right: 8px;
+          position: absolute;
+          right: 0;
+          transform: translateY(-7px);
+          letter-spacing: -0.3px;
+        }
+        .cal-grid {
+          flex: 1;
+          position: relative;
+          border-left: 0.5px solid rgba(0,0,0,0.12);
+        }
+        .cal-hour-line {
+          position: absolute;
+          left: 0; right: 0;
+          height: 0.5px;
+          background: rgba(0,0,0,0.08);
+        }
+        .cal-event {
+          position: absolute;
+          left: 4px; right: 4px;
+          border-radius: 8px;
+          padding: 6px 9px;
+          overflow: hidden;
+          cursor: pointer;
+          transition: opacity 0.15s, transform 0.1s;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .cal-event:active { opacity: 0.75; transform: scale(0.98); }
+        .cal-event-id {
+          font-size: 10px;
+          font-weight: 600;
+          opacity: 0.7;
+          letter-spacing: 0.3px;
+          margin-bottom: 1px;
+        }
+        .cal-event-title {
+          font-size: 13px;
+          font-weight: 600;
+          color: #000;
+          letter-spacing: -0.2px;
+          line-height: 1.2;
+        }
+        .cal-event-sub {
+          font-size: 11px;
+          color: rgba(0,0,0,0.6);
+          margin-top: 2px;
+          letter-spacing: -0.1px;
+        }
+        .cal-now-line {
+          position: absolute;
+          left: 0; right: 0;
+          height: 2px;
+          background: ${IOS.red};
+          border-radius: 1px;
+          z-index: 5;
+        }
+        .cal-now-dot {
+          position: absolute;
+          left: -4px;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 8px; height: 8px;
+          border-radius: 50%;
+          background: ${IOS.red};
+        }
+
+        /* ── Auftrags-Detailseite ── */
+        .detail-back-btn {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          border: none;
+          background: none;
+          color: ${CD};
+          font-size: 17px;
+          font-family: -apple-system, "Helvetica Neue", sans-serif;
+          cursor: pointer;
+          padding: 0;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .detail-type-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 4px 12px;
+          border-radius: 20px;
+          font-size: 13px;
+          font-weight: 600;
+          margin-bottom: 14px;
+        }
+        .detail-action-btn {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          padding: 16px 12px;
+          background: ${IOS.bg2};
+          border-radius: 14px;
+          border: none;
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+          transition: opacity 0.15s;
+        }
+        .detail-action-btn:active { opacity: 0.65; }
+        .detail-action-icon { font-size: 26px; }
+        .detail-action-label {
+          font-size: 12px;
+          font-weight: 500;
+          color: ${CD};
+          font-family: -apple-system, "Helvetica Neue", sans-serif;
+          letter-spacing: -0.1px;
+        }
+      `}</style>
+
+      <div className="ios-phone">
+        <div className="dynamic-island" />
+
+        {/* Status Bar */}
+        <div className="ios-status">
+          <span className="ios-status-time">09:41</span>
+          <div className="ios-status-icons">
+            <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor">
+              <rect x="0" y="3" width="3" height="9" rx="1" opacity="0.4"/>
+              <rect x="4.5" y="2" width="3" height="10" rx="1" opacity="0.6"/>
+              <rect x="9" y="0" width="3" height="12" rx="1" opacity="0.8"/>
+              <rect x="13.5" y="0" width="3" height="12" rx="1"/>
+            </svg>
+            <svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor">
+              <path d="M8 2.4A7.1 7.1 0 0 1 13.6 4.8L15 3.2A9.2 9.2 0 0 0 8 0 9.2 9.2 0 0 0 1 3.2L2.4 4.8A7.1 7.1 0 0 1 8 2.4Z"/>
+              <path d="M8 5.6A3.8 3.8 0 0 1 10.8 6.8L12.2 5.2A5.9 5.9 0 0 0 8 3.6 5.9 5.9 0 0 0 3.8 5.2L5.2 6.8A3.8 3.8 0 0 1 8 5.6Z" opacity="0.8"/>
+              <circle cx="8" cy="10" r="2"/>
+            </svg>
+            <svg width="25" height="12" viewBox="0 0 25 12" fill="currentColor">
+              <rect x="0" y="1" width="21" height="10" rx="3.5" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.35"/>
+              <rect x="22" y="4" width="3" height="4" rx="1" opacity="0.4"/>
+              <rect x="1.5" y="2.5" width="17" height="7" rx="2" opacity="0.9"/>
+            </svg>
+          </div>
+        </div>
+
+        {/* Toast */}
+        <div className={`ios-toast${saved?" show":""}`}>✓ Gespeichert</div>
+
+        {/* ── HOME Header (Outlook-Stil, blau) ── */}
+        {tab==="home" ? (
+          <div style={{
+            background:`linear-gradient(160deg, ${CD} 0%, ${CD_DARK} 100%)`,
+            padding:"6px 20px 18px",
+            flexShrink:0,
+          }}>
+            {/* Avatar + Titel + Icons */}
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <div style={{
+                width:42,height:42,borderRadius:21,
+                background:"rgba(255,255,255,0.25)",
+                border:"2px solid rgba(255,255,255,0.5)",
+                display:"flex",alignItems:"center",justifyContent:"center",
+                fontSize:20,flexShrink:0,
+              }}>👷</div>
+              <div style={{flex:1}}>
+                <div style={{
+                  fontFamily:IOS.fontDisplay,fontSize:26,fontWeight:700,
+                  color:"#fff",letterSpacing:-0.5,lineHeight:1.1,
+                }}>Hallo, Horst!</div>
+                <div style={{fontSize:13,color:"rgba(255,255,255,0.7)",marginTop:1}}>
+                  {TODAY_STR}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                {/* Glocke */}
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{cursor:"pointer"}}>
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                {/* Signet rechts, weißer Hintergrund */}
+                <img src={LOGO_B64} alt="PlanProtect"
+                  style={{height:38,width:"auto",objectFit:"contain",
+                    background:"#fff",borderRadius:8,padding:"4px 6px",
+                    boxShadow:"0 1px 4px rgba(0,0,0,0.15)"}}/>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Standard-Header für alle anderen Tabs */
+          <div className="ios-header">
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              {/* Signet vor dem Titel */}
+              <img src={LOGO_B64} alt="PlanProtect"
+                style={{height:34,width:"auto",objectFit:"contain",flexShrink:0,borderRadius:6}}/>
+              <div className="ios-large-title" style={{flex:1,fontSize:28}}>
+                {tab==="timer"?"Timer":tab==="log"?"Zeiten":tab==="auftraege"?(subPage==="material"?"Material":subPage==="zeichnung"?"Zeichnung":selectedAuftrag?"Auftragsdetail":"Aufträge"):"Auswertung"}
+                {running && (tab==="timer"||tab==="log") && <span className="live-pill"><span className="live-dot"/>Live</span>}
+              </div>
+            </div>
+            <div className="ios-header-sub">{TODAY_STR}</div>
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="ios-content">
+
+          {/* ── HOME ── */}
+          {tab==="home" && (() => {
+            // Nächsten Auftrag ermitteln (erster nach 09:41)
+            const NOW_MIN = 9 * 60 + 41;
+            const naechster = AUFTRAEGE.find(a => a.startH * 60 + a.startM > NOW_MIN) || AUFTRAEGE[0];
+            const col = ORDER_COLORS[naechster.typ] || CD;
+            const minsBis = (naechster.startH * 60 + naechster.startM) - NOW_MIN;
+            const bisTxt = minsBis > 60
+              ? `in ${Math.floor(minsBis/60)}h ${minsBis%60}min`
+              : minsBis > 0 ? `in ${minsBis} min` : "Jetzt";
+
+            // Entfernungen (Luftlinie Schwalmtal zu den Auftragorten, gerundet)
+            const DIST = {
+              "38241": "21 km",   // Mönchengladbach
+              "31756": "29 km",   // Düsseldorf
+              "34902": "18 km",   // Krefeld
+              "36083": "24 km",   // Neuss
+            };
+
+            return (
+              <>
+                <div style={{display:"flex",flexDirection:"column",gap:10,padding:"14px 16px 0"}}>
+
+                  {/* ── Nächster Auftrag ── */}
+                  <div style={{
+                    background:IOS.bg2, borderRadius:14, overflow:"hidden",
+                    cursor:"pointer", boxShadow:"0 1px 4px rgba(0,0,0,0.07)",
+                  }} onClick={()=>{setTab("auftraege");setSelectedAuftrag(naechster);}}>
+                    {/* Farbiger Kopfstreifen */}
+                    <div style={{
+                      background:`linear-gradient(135deg, ${col}22, ${col}11)`,
+                      borderBottom:`2px solid ${col}`,
+                      padding:"12px 16px 10px",
+                    }}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                        <div style={{
+                          fontSize:11,fontWeight:700,color:col,
+                          textTransform:"uppercase",letterSpacing:0.8,
+                        }}>Nächster Auftrag</div>
+                        <div style={{
+                          background:col+"22",color:col,
+                          fontSize:11,fontWeight:700,
+                          padding:"3px 10px",borderRadius:10,
+                          border:`1px solid ${col}44`,
+                        }}>{bisTxt}</div>
+                      </div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",textTransform:"uppercase",letterSpacing:0.4,marginBottom:2}}>Anlage-ID</div>
+                      <div style={{fontSize:22,fontWeight:700,color:IOS.label,letterSpacing:-0.4,lineHeight:1.15}}>
+                        ID {naechster.anlage}
+                      </div>
+                      <div style={{fontSize:14,color:IOS.label2,marginTop:2,letterSpacing:-0.1}}>
+                        {naechster.kunde}
+                      </div>
+                    </div>
+
+                    {/* Details */}
+                    <div style={{padding:"10px 16px 12px",display:"flex",flexDirection:"column",gap:6}}>
+                      <div style={{display:"flex",gap:16}}>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:10,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.4,marginBottom:2}}>Zeit</div>
+                          <div style={{fontFamily:IOS.mono,fontSize:15,fontWeight:600,color:IOS.label}}>
+                            {fmt2(naechster.startH)}:{fmt2(naechster.startM)} – {fmt2(naechster.endH)}:{fmt2(naechster.endM)}
+                          </div>
+                        </div>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:10,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.4,marginBottom:2}}>Typ</div>
+                          <div style={{fontSize:14,fontWeight:600,color:col}}>{naechster.typ}</div>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:16}}>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:10,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.4,marginBottom:2}}>Ort</div>
+                          <div style={{fontSize:13,color:IOS.label2}}>{naechster.ort}</div>
+                        </div>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:10,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.4,marginBottom:2}}>Entfernung</div>
+                          <div style={{fontSize:13,color:IOS.label2}}>{DIST[naechster.anlage] || "–"}</div>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:16}}>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:10,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.4,marginBottom:2}}>Ansprechpartner</div>
+                          <div style={{fontSize:13,color:IOS.label2}}>{naechster.ansprechpartner}</div>
+                        </div>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:10,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.4,marginBottom:2}}>Fahrzeit</div>
+                          <div style={{fontSize:13,color:IOS.label2}}>ca. 25 min</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── Offene Aufträge ── */}
+                  <div className="home-stat-card" style={{cursor:"pointer",display:"flex",alignItems:"center",gap:14}}
+                    onClick={()=>setTab("auftraege")}>
+                    <div style={{
+                      width:44,height:44,borderRadius:12,
+                      background:`rgba(189,189,0,0.15)`,
+                      display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0,
+                    }}>▦</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:15,fontWeight:600,color:IOS.label,letterSpacing:-0.2}}>Offene Aufträge heute</div>
+                      <div style={{fontSize:13,color:IOS.label3,marginTop:1}}>heute · {AUFTRAEGE.length} Einträge</div>
+                      <div style={{fontSize:11,color:CD,marginTop:3}}>Alle anzeigen ›</div>
+                    </div>
+                    <div style={{
+                      background:CD, color:"#000",
+                      fontSize:20, fontWeight:700,
+                      width:32, height:32, borderRadius:16,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      letterSpacing:-0.5,
+                    }}>{AUFTRAEGE.length}</div>
+                    <span className="ios-row-chevron">›</span>
+                  </div>
+                </div>
+
+                <div className="ios-section-header">Zuletzt erfasst</div>
+                <div className="ios-card">
+                  {entries.slice(0,3).map((e)=>(
+                    <div key={e.id} className="ios-row" onClick={()=>{setTab("log");}}>
+                      <div className="ios-row-icon" style={{background:TYPE_COLORS[e.type]+"18"}}>
+                        <span style={{fontFamily:"monospace",fontSize:13,fontWeight:800,color:TYPE_COLORS[e.type]}}>{TYPE_ICONS[e.type]}</span>
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:16,color:IOS.label,letterSpacing:-0.2}}>{e.type}</div>
+                        <div style={{fontSize:12,color:IOS.label3,marginTop:1}}>{e.start}–{e.end} · {e.note}</div>
+                      </div>
+                      <span style={{fontFamily:IOS.mono,fontSize:13,color:IOS.label2}}>{fmtHM(e.duration)}</span>
+                      <span className="ios-row-chevron">›</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
+
+          {/* ── TIMER ── */}
+          {tab==="timer" && (
+            <>
+              {/* Start / Ende Kacheln + Timer-Start-Button rechts oben */}
+              <div style={{padding:"8px 16px 4px"}}>
+                {/* Zeile: Kacheln + Start-Button */}
+                <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                  {/* Startzeit */}
+                  <div style={{
+                    flex:1, background:IOS.bg2, borderRadius:14, padding:"14px 16px",
+                    borderLeft: running ? `3px solid ${"#bdbd00"}` : `3px solid rgba(0,0,0,0.07)`,
+                  }}>
+                    <div style={{fontSize:11,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>
+                      Start
+                    </div>
+                    <div style={{fontFamily:IOS.mono,fontSize:32,fontWeight:300,color:running?IOS.label:"rgba(0,0,0,0.2)",letterSpacing:-1,lineHeight:1}}>
+                      {running ? startTime : "– –:– –"}
+                    </div>
+                    {running && (
+                      <div style={{fontSize:11,color:IOS.label3,marginTop:4}}>Uhrzeit</div>
+                    )}
+                  </div>
+
+                  {/* Endzeit / laufend */}
+                  <div style={{
+                    flex:1, background:IOS.bg2, borderRadius:14, padding:"14px 16px",
+                    borderLeft: running ? `3px solid ${IOS.red}` : `3px solid rgba(0,0,0,0.07)`,
+                  }}>
+                    <div style={{fontSize:11,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>
+                      Ende
+                    </div>
+                    <div style={{fontFamily:IOS.mono,fontSize:32,fontWeight:300,color:running?IOS.label:"rgba(0,0,0,0.2)",letterSpacing:-1,lineHeight:1}}>
+                      {running ? liveEnd : "– –:– –"}
+                    </div>
+                    {running && (
+                      <div style={{fontSize:11,color:IOS.label3,marginTop:4}}>laufend</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Elapsed klein */}
+              <div style={{textAlign:"center",padding:"6px 0 8px"}}>
+                <span style={{
+                  fontFamily:IOS.mono, fontSize:15, fontWeight:400,
+                  color: running ? IOS.label2 : "rgba(0,0,0,0.25)",
+                  letterSpacing:-0.3,
+                }}>
+                  {running ? `⏱ ${fmtHMS(elapsed)}` : "Noch nicht gestartet"}
+                </span>
+              </div>
+
+              {/* Arbeitszeittyp */}
+              <div className="ios-section-header">Arbeitszeittyp</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,padding:"0 16px"}}>
+                {TYPES.map(t=>(
+                  <div key={t}
+                    onClick={()=>setSelType(t)}
+                    style={{
+                      display:"flex", alignItems:"center", gap:8,
+                      padding:"11px 14px", borderRadius:12,
+                      background: selType===t ? TYPE_COLORS[t]+"33" : IOS.bg2,
+                      border: selType===t ? `1.5px solid ${TYPE_COLORS[t]}` : "1.5px solid transparent",
+                      cursor:"pointer", transition:"all 0.15s",
+                    }}
+                  >
+                    <span style={{fontSize:18}}>{TYPE_ICONS[t]}</span>
+                    <span style={{
+                      fontSize:14, fontWeight:500, letterSpacing:-0.2,
+                      color: selType===t ? "#fff" : IOS.label2,
+                    }}>{t}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Anlage */}
+              <div className="ios-section-header">Anlage-ID</div>
+              <div className="ios-card">
+                <div className="ios-row" style={{cursor:"default"}}>
+                  <div className="ios-row-label" style={{fontSize:15}}>
+                    <select value={anlage} onChange={e=>setAnlage(e.target.value)} style={{
+                      background:"none",border:"none",color:anlage===ANLAGEN[0]?IOS.label2:IOS.label,
+                      fontSize:16,fontFamily:IOS.font,width:"100%",outline:"none",
+                      letterSpacing:-0.2, cursor:"pointer",
+                    }}>
+                      {ANLAGEN.map(a=><option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notiz */}
+              <div className="ios-section-header">Notiz</div>
+              <div className="ios-card">
+                <div className="ios-row" style={{cursor:"default"}}>
+                  <input
+                    value={note}
+                    onChange={e=>setNote(e.target.value)}
+                    placeholder="Optional…"
+                    style={{
+                      background:"none",border:"none",color:IOS.label,fontSize:16,
+                      fontFamily:IOS.font,width:"100%",outline:"none",letterSpacing:-0.2,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div style={{padding:"12px 16px 8px",display:"flex",gap:12}}>
+                <button className={`ios-btn ${running?"ios-btn-red":"ios-btn-green"}`}
+                  style={{flex:1}} onClick={handleStartStop}>
+                  {running?"⏹ Stop":"▶ Timer starten"}
+                </button>
+                {!running && elapsed>0 && (
+                  <button className="ios-btn ios-btn-blue" style={{flex:1}} onClick={handleSave}>
+                    Speichern
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ── LOG ── */}
+          {tab==="log" && (() => {
+            // Datum-Label
+            const logDateLabel = (() => {
+              if (logDayOffset === 0) return "Heute";
+              if (logDayOffset === -1) return "Gestern";
+              const d = new Date(2026, 4, 29);
+              d.setDate(d.getDate() + logDayOffset);
+              return d.toLocaleDateString("de-DE", {weekday:"long", day:"2-digit", month:"long"});
+            })();
+
+            // Für Demo: bei Offset=0 echte Einträge, sonst Demo-Daten
+            const demoEntries = logDayOffset === -1 ? [
+              {id:101, type:"Hinfahrt",     start:"07:15", end:"08:00", duration:2700,  note:"Schmidt KG",        anlage:"–"},
+              {id:102, type:"Service",      start:"08:00", end:"11:30", duration:12600, note:"Wartung Jahresplan", anlage:"Anlage B – Halle 2"},
+              {id:103, type:"Pause",        start:"11:30", end:"12:00", duration:1800,  note:"–",                 anlage:"–"},
+              {id:104, type:"Installation", start:"12:30", end:"16:45", duration:15300, note:"Erweiterung Panel",  anlage:"Anlage B – Halle 2"},
+              {id:105, type:"Rückfahrt",    start:"16:45", end:"17:30", duration:2700,  note:"Schmidt KG",        anlage:"–"},
+            ] : logDayOffset < -1 ? [] : null;
+
+            const visibleEntries = logDayOffset === 0 ? entries : (demoEntries || []);
+            const dayTotal = visibleEntries.reduce((s,e)=>s+e.duration,0);
+
+            return (
+              <>
+                {/* Datumsnavigation */}
+                <div className="period-nav-row" style={{margin:"8px 16px 0"}}>
+                  <button className="period-arrow-btn" onClick={()=>setLogDayOffset(o=>o-1)}>‹</button>
+                  <div style={{textAlign:"center"}}>
+                    <div className="period-nav-label">{logDateLabel}</div>
+                    {dayTotal > 0 && (
+                      <div style={{fontSize:12,color:IOS.label3,marginTop:1,fontFamily:IOS.mono}}>
+                        {fmtHM(dayTotal)} erfasst
+                      </div>
+                    )}
+                  </div>
+                  <button className="period-arrow-btn"
+                    onClick={()=>setLogDayOffset(o=>o+1)}
+                    disabled={logDayOffset>=0}>›</button>
+                </div>
+
+                {/* Neue Zeit erfassen – nur für heute */}
+                {logDayOffset === 0 && (
+                  <div style={{padding:"10px 16px 0",display:"flex",justifyContent:"flex-end"}}>
+                    <button onClick={()=>{
+                      setNewSH(8); setNewSM(0); setNewEH(9); setNewEM(0);
+                      setNewType(TYPES[0]); setNewAnlage(ANLAGEN[0]);
+                      setNewNote(""); setNewError("");
+                      setShowNewEntrySheet(true);
+                    }} style={{
+                      display:"flex",alignItems:"center",gap:6,
+                      padding:"8px 16px",borderRadius:20,border:"none",
+                      background:CD,color:"#000",fontFamily:IOS.font,
+                      fontSize:13,fontWeight:700,cursor:"pointer",
+                    }}>
+                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="#000" strokeWidth="2" strokeLinecap="round">
+                        <line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/>
+                      </svg>
+                      Neue Zeit
+                    </button>
+                  </div>
+                )}
+
+                {/* Aktiv laufend (nur heute) */}
+                {logDayOffset === 0 && running && (
+                  <>
+                    <div className="ios-section-header">Aktiv</div>
+                    <div className="ios-card">
+                      <div className="ios-row" style={{cursor:"default"}}>
+                        <div className="ios-row-icon" style={{background:TYPE_COLORS[selType]+"22"}}>
+                          <span style={{fontFamily:"monospace",fontSize:14,fontWeight:800,color:TYPE_COLORS[selType]}}>{TYPE_ICONS[selType]}</span>
+                        </div>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:16,color:IOS.label,letterSpacing:-0.2}}>{selType}</div>
+                          <div style={{fontSize:12,color:IOS.label3,marginTop:1}}>seit {startTime}</div>
+                        </div>
+                        <span style={{fontFamily:IOS.mono,fontSize:14,color:TYPE_COLORS[selType],fontWeight:600}}>
+                          {fmtHMS(elapsed)}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Zeiten */}
+                <div className="ios-section-header" style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingRight:16}}>
+                  <span>{logDayOffset===0?"Heute":"Erfasste Zeiten"} — zum Bearbeiten tippen</span>
+                </div>
+
+                {visibleEntries.length === 0 ? (
+                  <div style={{
+                    margin:"0 16px",padding:"32px 16px",textAlign:"center",
+                    background:IOS.bg2,borderRadius:12,
+                  }}>
+                    <div style={{fontSize:32,marginBottom:8}}>📭</div>
+                    <div style={{fontSize:15,color:IOS.label2,fontWeight:500}}>Keine Einträge</div>
+                    <div style={{fontSize:13,color:IOS.label3,marginTop:4}}>
+                      Für diesen Tag wurden keine Zeiten erfasst.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="ios-card">
+                    {visibleEntries.map((e)=>(
+                      <div key={e.id} className="ios-row"
+                        onClick={()=>logDayOffset===0?openEdit(e):null}
+                        style={{cursor:logDayOffset===0?"pointer":"default"}}>
+                        <div className="ios-row-icon" style={{background:TYPE_COLORS[e.type]+"18"}}>
+                          <span style={{fontFamily:"monospace",fontSize:13,fontWeight:800,color:TYPE_COLORS[e.type]}}>{TYPE_ICONS[e.type]}</span>
+                        </div>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:16,color:IOS.label,letterSpacing:-0.2}}>{e.type}</div>
+                          <div style={{fontSize:12,color:IOS.label3,marginTop:1}}>
+                            {e.start}–{e.end}
+                            {e.anlage!=="–"?` · ${e.anlage}`:""}
+                            {e.note!=="–"?` · ${e.note}`:""}
+                          </div>
+                        </div>
+                        <span style={{fontFamily:IOS.mono,fontSize:13,color:IOS.label2}}>{fmtHM(e.duration)}</span>
+                        {logDayOffset===0 && <span className="ios-row-chevron">›</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Tagessumme */}
+                {visibleEntries.length > 0 && (
+                  <div style={{
+                    margin:"10px 16px 0",padding:"12px 16px",
+                    background:IOS.bg2,borderRadius:12,
+                    display:"flex",justifyContent:"space-between",alignItems:"center",
+                  }}>
+                    <span style={{fontSize:14,color:IOS.label2,fontWeight:500}}>Summe</span>
+                    <span style={{fontFamily:IOS.mono,fontSize:17,fontWeight:600,color:IOS.label}}>
+                      {fmtHM(dayTotal)}
+                    </span>
+                  </div>
+                )}
+                <div style={{height:16}}/>
+              </>
+            );
+          })()}
+
+          {/* ── STATS ── */}
+          {tab==="stats" && (
+            <>
+              <div className="ios-section-header" style={{paddingTop:8}}>Zeitraum</div>
+              <div className="ios-segmented" style={{marginBottom:10}}>
+                <button className={`ios-seg-btn${statsMode==="tag"?" active":""}`}
+                  onClick={()=>{setStatsMode("tag");setStatsOffset(0);}}>Tag</button>
+                <button className={`ios-seg-btn${statsMode==="monat"?" active":""}`}
+                  onClick={()=>{setStatsMode("monat");setStatsOffset(0);}}>Monat</button>
+              </div>
+
+              <div className="period-nav-row">
+                <button className="period-arrow-btn" onClick={()=>setStatsOffset(o=>o-1)}>‹</button>
+                <span className="period-nav-label">{statsPeriodLabel}</span>
+                <button className="period-arrow-btn" onClick={()=>setStatsOffset(o=>o+1)} disabled={statsOffset>=0}>›</button>
+              </div>
+
+              <div className="ios-section-header">Gesamt</div>
+              <div className="ios-card">
+                <div className="ios-row" style={{cursor:"default"}}>
+                  <span className="ios-row-label">Erfasste Zeit</span>
+                  <span style={{fontFamily:IOS.mono,fontSize:17,color:IOS.label}}>{fmtHM(statsTotalSec)}</span>
+                </div>
+                <div className="ios-row" style={{cursor:"default"}}>
+                  <span className="ios-row-label">Zeiten</span>
+                  <span style={{fontSize:17,color:IOS.label}}>{statsOffset===0?entries.length:Math.abs(statsOffset)}</span>
+                </div>
+                <div className="ios-row" style={{cursor:"default"}}>
+                  <span className="ios-row-label">{statsMode==="tag"?"Tagesziel (8h)":"Monatsziel (168h)"}</span>
+                  <span style={{fontSize:17,color:IOS.label}}>
+                    {Math.min(Math.round(statsTotalSec/(statsMode==="tag"?28800:604800)*100),100)}%
+                  </span>
+                </div>
+              </div>
+              <div className="ios-progress-track">
+                <div className="ios-progress-fill" style={{
+                  width:`${Math.min(statsTotalSec/(statsMode==="tag"?28800:604800)*100,100)}%`,
+                  background: statsMode==="tag"
+                    ? `linear-gradient(90deg, ${CD}, ${IOS.green})`
+                    : `linear-gradient(90deg, #FF9F0A, #FF453A)`,
+                }}/>
+              </div>
+
+              <div className="ios-section-header">Nach Arbeitszeittyp</div>
+              {TYPES.map(p=>(
+                <div className="bar-row" key={p}>
+                  <span style={{fontFamily:"monospace",fontSize:14,fontWeight:800,color:TYPE_COLORS[p],width:20,textAlign:"center"}}>{TYPE_ICONS[p]}</span>
+                  <div style={{width:64,fontSize:11,color:IOS.label2,letterSpacing:-0.2,flexShrink:0}}>{p}</div>
+                  <div className="bar-track">
+                    <div className="bar-fill" style={{width:`${statsTotals[p]/statsMax*100}%`,background:TYPE_COLORS[p]}}/>
+                  </div>
+                  <div className="bar-val">{fmtHM(statsTotals[p])}</div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* ── AUFTRÄGE – Kalenderansicht ── */}
+          {tab==="auftraege" && !selectedAuftrag && (() => {
+            const HOUR_H = 64;
+            const START_H = 6;
+            const END_H   = 19;
+            const calHours = Array.from({length: END_H - START_H + 1}, (_,i) => START_H + i);
+            const totalH  = (END_H - START_H) * HOUR_H;
+            const nowMin  = 9 * 60 + 41;
+            const nowTop  = ((nowMin / 60) - START_H) * HOUR_H;
+
+            // Datum-Label für Navigation
+            const auftrDayLabel = (() => {
+              if (auftragDayOffset === 0) return "Freitag, 29. Mai 2026";
+              if (auftragDayOffset === -1) return "Donnerstag, 28. Mai 2026";
+              if (auftragDayOffset === 1) return "Samstag, 30. Mai 2026";
+              if (auftragDayOffset === 2) return "Montag, 1. Juni 2026";
+              const d = new Date(2026, 4, 29);
+              d.setDate(d.getDate() + auftragDayOffset);
+              return d.toLocaleDateString("de-DE", {weekday:"long", day:"2-digit", month:"long", year:"numeric"});
+            })();
+
+            // Aufträge je nach Tag
+            const AUFTRAEGE_MORGEN = [
+              {
+                                anlage: "39514",
+                kunde: "Baumann GmbH",
+                ort: "Viersen",
+                typ: "Service",
+                startH: 8, startM: 0, endH: 10, endM: 0,
+                adresse: "Remigiusstr. 12, 41747 Viersen",
+                ansprechpartner: "Klaus Baumann",
+                tel: "+49 2162 8810-0",
+              },
+              {
+                                anlage: "32678",
+                kunde: "Lorenz AG",
+                ort: "Mönchengladbach",
+                typ: "Übernahme",
+                startH: 11, startM: 0, endH: 14, endM: 30,
+                adresse: "Aachener Str. 55, 41061 Mönchengladbach",
+                ansprechpartner: "Anna Lorenz",
+                tel: "+49 2161 3350-7",
+              },
+            ];
+            const AUFTRAEGE_MONTAG = [
+              {
+                                anlage: "35129",
+                kunde: "Huber Technik",
+                ort: "Krefeld",
+                typ: "Installation",
+                startH: 7, startM: 30, endH: 12, endM: 0,
+                adresse: "Moerser Str. 200, 47803 Krefeld",
+                ansprechpartner: "Dieter Huber",
+                tel: "+49 2151 4490-2",
+              },
+            ];
+
+            const visAuftraege = auftragDayOffset === 0 ? AUFTRAEGE
+              : auftragDayOffset === 1 ? AUFTRAEGE_MORGEN
+              : auftragDayOffset === 2 ? AUFTRAEGE_MONTAG
+              : [];
+
+            return (
+              <>
+                {/* Datumsnavigation */}
+                <div className="period-nav-row" style={{margin:"8px 16px 6px"}}>
+                  <button className="period-arrow-btn" onClick={()=>setAuftragDayOffset(o=>o-1)}>‹</button>
+                  <div style={{textAlign:"center"}}>
+                    <div className="period-nav-label" style={{fontSize:14}}>{auftrDayLabel}</div>
+                    <div style={{fontSize:12,color:IOS.label3,marginTop:1}}>
+                      {visAuftraege.length > 0 ? `${visAuftraege.length} Aufträge` : "Keine Aufträge"}
+                    </div>
+                  </div>
+                  <button className="period-arrow-btn"
+                    onClick={()=>setAuftragDayOffset(o=>o+1)}>›</button>
+                </div>
+
+                {visAuftraege.length === 0 ? (
+                  <div style={{
+                    margin:"16px 16px 0",padding:"40px 20px",textAlign:"center",
+                    background:IOS.bg2,borderRadius:12,
+                  }}>
+                    <div style={{fontSize:36,marginBottom:10}}>📭</div>
+                    <div style={{fontSize:16,fontWeight:600,color:IOS.label}}>Keine Aufträge</div>
+                    <div style={{fontSize:13,color:IOS.label3,marginTop:4}}>Für diesen Tag sind keine Aufträge geplant.</div>
+                  </div>
+                ) : (
+                  <div className="cal-wrap">
+                    {/* Zeitspalte */}
+                    <div className="cal-time-col" style={{height: totalH + 32}}>
+                      {calHours.map(h => (
+                        <div key={h} className="cal-time-label" style={{top: (h - START_H) * HOUR_H}}>
+                          {fmt2(h)}:00
+                        </div>
+                      ))}
+                    </div>
+                    {/* Gitter */}
+                    <div className="cal-grid" style={{height: totalH + 32}}>
+                      {calHours.map(h => (
+                        <div key={h} className="cal-hour-line" style={{top: (h - START_H) * HOUR_H}}/>
+                      ))}
+                      {/* Jetzt-Linie nur heute */}
+                      {auftragDayOffset === 0 && (
+                        <div className="cal-now-line" style={{top: nowTop}}>
+                          <div className="cal-now-dot"/>
+                        </div>
+                      )}
+                      {visAuftraege.map(a => {
+                        const topMin = a.startH * 60 + a.startM;
+                        const botMin = a.endH   * 60 + a.endM;
+                        const top    = ((topMin / 60) - START_H) * HOUR_H;
+                        const height = Math.max(((botMin - topMin) / 60) * HOUR_H - 4, 44);
+                        const col    = ORDER_COLORS[a.typ] || CD;
+                        return (
+                          <div key={a.id} className="cal-event"
+                            style={{top: top+2, height, background: col+"1A",
+                              borderLeft:`3px solid ${col}`,
+                              boxShadow:`inset 0 0 0 1px ${col}22`}}
+                            onClick={()=>setSelectedAuftrag(a)}>
+                            
+                            <div style={{fontSize:13,fontWeight:600,color:"#000",lineHeight:1.2}}>
+                              ID {a.anlage} · {a.kunde}
+                            </div>
+                            {height > 52 && (
+                              <div style={{fontSize:11,color:"rgba(0,0,0,0.55)",marginTop:2}}>
+                                {fmt2(a.startH)}:{fmt2(a.startM)}–{fmt2(a.endH)}:{fmt2(a.endM)} · {a.ort}
+                              </div>
+                            )}
+                            <div style={{
+                              position:"absolute",top:6,right:6,fontSize:10,fontWeight:600,
+                              color:col,background:col+"22",
+                              padding:"2px 6px",borderRadius:8,border:`1px solid ${col}44`,
+                            }}>
+                              {a.typ}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+
+          {/* ── AUFTRÄGE – Detailansicht ── */}
+          {tab==="auftraege" && selectedAuftrag && (() => {
+            const a = selectedAuftrag;
+            const col = ORDER_COLORS[a.typ] || "#4DA3FF";
+            return (
+              <>
+                <div style={{padding:"2px 16px 10px"}}>
+                  <button className="detail-back-btn" onClick={()=>setSelectedAuftrag(null)}>
+                    <span style={{fontSize:20,marginTop:-1}}>‹</span> Aufträge
+                  </button>
+                </div>
+                <div style={{padding:"0 16px 8px"}}>
+                  {/* Anlage + Typ-Badge in einer Zeile */}
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                    <div>
+                    <div style={{fontSize:11,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.4,marginBottom:2}}>Anlage-ID</div>
+                    <div style={{fontSize:26,fontWeight:700,color:IOS.label,letterSpacing:-0.5,lineHeight:1.1}}>ID {a.anlage}</div>
+                  </div>
+                    <div className="detail-type-badge" style={{background:col+"22",color:col,flexShrink:0,marginBottom:0}}>{a.typ}</div>
+                  </div>
+                  <div style={{fontSize:17,color:IOS.label2,letterSpacing:-0.2,marginTop:6}}>{a.kunde}</div>
+                </div>
+
+                {/* Timer läuft: Start/Ende-Kacheln + Stop-Button */}
+                {running && (
+                  <>
+                    {/* Start / Ende Kacheln */}
+                    <div style={{display:"flex",gap:10,padding:"8px 16px 4px"}}>
+                      <div style={{
+                        flex:1,background:IOS.bg2,borderRadius:14,padding:"14px 16px",
+                        borderLeft:`3px solid ${CD}`,
+                      }}>
+                        <div style={{fontSize:11,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Start</div>
+                        <div style={{fontFamily:IOS.mono,fontSize:28,fontWeight:300,color:IOS.label,letterSpacing:-1,lineHeight:1}}>
+                          {startTime}
+                        </div>
+                        <div style={{fontSize:11,color:IOS.label3,marginTop:4}}>Uhrzeit</div>
+                      </div>
+                      <div style={{
+                        flex:1,background:IOS.bg2,borderRadius:14,padding:"14px 16px",
+                        borderLeft:`3px solid ${IOS.red}`,
+                      }}>
+                        <div style={{fontSize:11,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Ende</div>
+                        <div style={{fontFamily:IOS.mono,fontSize:28,fontWeight:300,color:IOS.label,letterSpacing:-1,lineHeight:1}}>
+                          {liveEnd}
+                        </div>
+                        <div style={{fontSize:11,color:IOS.label3,marginTop:4}}>laufend</div>
+                      </div>
+                    </div>
+                    {/* Elapsed + Stop */}
+                    <div style={{padding:"4px 16px 8px",display:"flex",gap:10,alignItems:"center"}}>
+                      <div style={{
+                        display:"flex",alignItems:"center",gap:6,flex:1,
+                        background:"rgba(255,59,48,0.07)",borderRadius:14,padding:"10px 14px",
+                      }}>
+                        <span className="live-dot"/>
+                        <span style={{fontFamily:IOS.mono,fontSize:15,fontWeight:600,color:IOS.red}}>
+                          {fmtHMS(elapsed)}
+                        </span>
+                      </div>
+                      <button onClick={()=>{
+                        setRunning(false);
+                        const end = nowHHMM();
+                        setEntries(prev => [{
+                          id: Date.now(),
+                          type: selType,
+                          start: startTime,
+                          end: end,
+                          duration: elapsed,
+                          note: "",
+                          anlage: a.anlage + " – " + a.kunde,
+                        }, ...prev]);
+                        setElapsed(0);
+                        setSaved(true);
+                        setTimeout(()=>setSaved(false), 2200);
+                      }} style={{
+                        display:"flex",alignItems:"center",gap:6,
+                        padding:"11px 20px",borderRadius:14,border:"none",
+                        background:IOS.red,color:"#fff",fontFamily:IOS.font,
+                        fontSize:14,fontWeight:700,cursor:"pointer",flex:1,
+                        justifyContent:"center",
+                      }}>
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="#fff"><rect x="2" y="2" width="8" height="8" rx="1.5"/></svg>
+                        Stoppen &amp; Speichern
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                <div className="ios-section-header">Geplanter Zeitraum</div>
+                <div style={{
+                  background:IOS.bg2, borderRadius:12, margin:"0 16px",
+                  padding:"10px 16px",
+                }}>
+                  {/* Start / Ende / Dauer Zeile */}
+                  <div style={{display:"flex", alignItems:"center", gap:0}}>
+                    {/* Start */}
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:10,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.4,marginBottom:2}}>Start</div>
+                      <div style={{fontFamily:IOS.mono,fontSize:16,fontWeight:600,color:IOS.label}}>
+                        {fmt2(a.startH)}:{fmt2(a.startM)}
+                      </div>
+                    </div>
+                    {/* Arrow */}
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.2)" strokeWidth="2" strokeLinecap="round" style={{flexShrink:0,margin:"0 6px"}}>
+                      <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                    {/* Ende */}
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:10,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.4,marginBottom:2}}>Ende</div>
+                      <div style={{fontFamily:IOS.mono,fontSize:16,fontWeight:600,color:IOS.label}}>
+                        {fmt2(a.endH)}:{fmt2(a.endM)}
+                      </div>
+                    </div>
+                    {/* Divider */}
+                    <div style={{width:"0.5px",height:32,background:"rgba(0,0,0,0.1)",margin:"0 12px",flexShrink:0}}/>
+                    {/* Dauer */}
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:10,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.4,marginBottom:2}}>Dauer</div>
+                      <div style={{fontFamily:IOS.mono,fontSize:16,fontWeight:600,color:CD}}>
+                        {fmtHM((a.endH*60+a.endM-(a.startH*60+a.startM))*60)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Trennlinie */}
+                  <div style={{height:"0.5px",background:"rgba(0,0,0,0.08)",margin:"10px 0"}}/>
+
+                  {/* Timer starten / Live-Anzeige */}
+                  {!running ? (
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>{
+                        setSelType("Installation");
+                        setAnlage(a.anlage + " – " + a.kunde);
+                        setNote(a.id);
+                        setStartTime(nowHHMM());
+                        setLiveEnd(nowHHMM());
+                        setElapsed(0);
+                        setSaved(false);
+                        setRunning(true);
+                      }} style={{
+                        flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,
+                        padding:"10px 0",borderRadius:10,border:"none",
+                        background:CD,color:"#000",fontFamily:IOS.font,
+                        fontSize:13,fontWeight:700,cursor:"pointer",
+                      }}>
+                        <svg width="11" height="11" viewBox="0 0 12 12" fill="#000"><polygon points="2,1 11,6 2,11"/></svg>
+                        Timer starten
+                      </button>
+                      <button onClick={()=>{
+                        setNewSH(a.startH); setNewSM(a.startM);
+                        setNewEH(a.endH);   setNewEM(a.endM);
+                        setNewType(a.typ === "Installation" ? "Installation" : a.typ === "Service" ? "Service" : "Installation");
+                        setNewAnlage(ANLAGEN.find(x => x.startsWith(a.anlage)) || ANLAGEN[0]);
+                        setNewNote(""); setNewError("");
+                        setShowQuickEntrySheet(true);
+                      }} style={{
+                        flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+                        padding:"10px 0",borderRadius:10,border:`1.5px solid ${CD}`,
+                        background:"transparent",color:CD,fontFamily:IOS.font,
+                        fontSize:13,fontWeight:700,cursor:"pointer",
+                      }}>
+                        <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke={CD} strokeWidth="2.2" strokeLinecap="round">
+                          <line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/>
+                        </svg>
+                        Neue Zeit
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                      <span className="live-dot"/>
+                      <span style={{fontFamily:IOS.mono,fontSize:13,fontWeight:600,color:IOS.red}}>
+                        {fmtHMS(elapsed)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="ios-section-header">Kontakt &amp; Anfahrt</div>
+                <div className="ios-card">
+                  <div className="ios-row" style={{cursor:"default"}}>
+                    <div className="ios-row-icon" style={{background:"rgba(189,189,0,0.15)"}}>🏢</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:15,color:IOS.label,letterSpacing:-0.2,fontWeight:500}}>{a.kunde}</div>
+                      <div style={{fontSize:12,color:IOS.label3,marginTop:1}}>Kundenname</div>
+                    </div>
+                  </div>
+                  <div className="ios-row" style={{cursor:"pointer"}}
+                    onClick={()=>window.open(`https://maps.google.com/?q=${encodeURIComponent(a.adresse)}`)}>
+                    <div className="ios-row-icon" style={{background:"rgba(189,189,0,0.15)"}}>📍</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:15,fontWeight:600,color:IOS.label,letterSpacing:-0.2}}>{a.objekt || a.ort}</div>
+                      <div style={{fontSize:13,color:CD,marginTop:1}}>{a.adresse}</div>
+                      <div style={{fontSize:12,color:IOS.label3,marginTop:1}}>Objektanschrift · In Maps öffnen</div>
+                    </div>
+                    <span className="ios-row-chevron">›</span>
+                  </div>
+                  <div className="ios-row" style={{cursor:"default"}}>
+                    <div className="ios-row-icon" style={{background:"rgba(189,189,0,0.15)"}}>👤</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:15,color:IOS.label,letterSpacing:-0.2}}>{a.ansprechpartner}</div>
+                      <div style={{fontSize:12,color:IOS.label3,marginTop:1}}>Ansprechpartner</div>
+                    </div>
+                  </div>
+                  <div className="ios-row" style={{cursor:"pointer"}} onClick={()=>window.open(`tel:${a.tel}`)}>
+                    <div className="ios-row-icon" style={{background:"rgba(189,189,0,0.15)"}}>📞</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:15,color:CD,letterSpacing:-0.2}}>{a.tel}</div>
+                      <div style={{fontSize:12,color:IOS.label3,marginTop:1}}>Tel.</div>
+                    </div>
+                    <span className="ios-row-chevron">›</span>
+                  </div>
+                </div>
+
+                <div className="ios-section-header">Installationshinweise</div>
+                <div style={{
+                  background:IOS.bg2,borderRadius:12,margin:"0 16px",
+                  padding:"14px 16px",
+                }}>
+                  <div style={{fontWeight:600,color:CD,marginBottom:8,fontSize:12,textTransform:"uppercase",letterSpacing:0.5}}>
+                    Wichtige Hinweise
+                  </div>
+                  {[
+                    "Vor Arbeitsbeginn Spannungsfreiheit sicherstellen und protokollieren.",
+                    "Anlage gemäß Schaltplan Dok. E-001 Rev. B verdrahten.",
+                    "SPC-Zentrale erst nach vollständiger Verkabelung einschalten.",
+                    "GSM-Modul: SIM-Karte vor Einbau aktivieren (PIN deaktivieren).",
+                    "Abschlusstest mit Leitstelle Referenz-Nr. 4320 durchführen.",
+                    "Übergabeprotokoll vom Kunden unterzeichnen lassen.",
+                  ].map((hint, idx) => (
+                    <div key={idx} style={{
+                      display:"flex", gap:10, alignItems:"flex-start",
+                      padding:"7px 0",
+                      borderBottom: idx < 5 ? "0.5px solid rgba(0,0,0,0.06)" : "none",
+                    }}>
+                      <span style={{color:CD,fontWeight:700,fontSize:14,flexShrink:0,marginTop:1}}>•</span>
+                      <span style={{fontSize:14,color:IOS.label,lineHeight:1.5,letterSpacing:-0.1}}>{hint}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="ios-section-header">Dokumente</div>
+                <div style={{display:"flex",gap:10,padding:"0 16px 28px"}}>
+                  <button className="detail-action-btn" onClick={()=>setShowMaterialSheet(true)}>
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={CD} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                      <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                      <line x1="12" y1="22.08" x2="12" y2="12"/>
+                    </svg>
+                    <span className="detail-action-label">Material</span>
+                  </button>
+                  <button className="detail-action-btn" onClick={()=>setShowZeichnungSheet(true)}>
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={CD} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="16" y1="13" x2="8" y2="13"/>
+                      <line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                    <span className="detail-action-label">Zeichnung</span>
+                  </button>
+                </div>
+
+                {/* Material Quick-Sheet */}
+                {showMaterialSheet && (() => {
+                  const matItems = [
+                    {qty:"1×", art:"Vanderb. Komfortbedienteil"},
+                    {qty:"3×", art:"Vanderb. Dualmelder 12 m"},
+                    {qty:"1×", art:"Akku 7,0 Ah"},
+                    {qty:"1×", art:"Vanderb. SPC Zentrale 4320"},
+                    {qty:"1×", art:"GSM SIM-Karte"},
+                  ];
+                  return (
+                    <div className="mat-sheet-overlay"
+                      onClick={(e)=>{if(e.target===e.currentTarget)setShowMaterialSheet(false);}}>
+                      <div className="mat-sheet">
+                        <div className="sheet-handle"/>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px 10px"}}>
+                          <div>
+                            <div style={{fontSize:17,fontWeight:700,color:IOS.label,letterSpacing:-0.3}}>Materialliste</div>
+                            <div style={{fontSize:12,color:IOS.label3,marginTop:1}}>ID {a.anlage} · {a.kunde}</div>
+                          </div>
+                          <button onClick={()=>setShowMaterialSheet(false)} style={{
+                            border:"none",background:"rgba(0,0,0,0.07)",
+                            width:30,height:30,borderRadius:15,
+                            fontSize:15,color:IOS.label2,cursor:"pointer",
+                            display:"flex",alignItems:"center",justifyContent:"center",
+                          }}>✕</button>
+                        </div>
+                        <div style={{height:"0.5px",background:"rgba(0,0,0,0.08)"}}/>
+                        {matItems.map((it,i)=>(
+                          <div key={i} className="mat-item-row">
+                            <div className="mat-item-qty">{it.qty}</div>
+                            <div style={{fontSize:15,color:IOS.label,letterSpacing:-0.2,flex:1}}>{it.art}</div>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.2)" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                          </div>
+                        ))}
+                        <div style={{margin:"10px 20px 0",padding:"10px 14px",background:"rgba(189,189,0,0.08)",borderRadius:10,
+                          display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{fontSize:13,color:IOS.label2,fontWeight:500}}>Positionen gesamt</span>
+                          <span style={{fontFamily:IOS.mono,fontSize:15,fontWeight:700,color:CD}}>{matItems.length}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Zeichnung Quick-Sheet */}
+                {showZeichnungSheet && (() => {
+                  const sheets = [
+                    {nr:"E-001", titel:"Übersichtsschaltplan",      rev:"B", datum:"12.05.2026", seiten:2},
+                    {nr:"E-002", titel:"Klemmenpläne",               rev:"A", datum:"08.04.2026", seiten:4},
+                    {nr:"E-003", titel:"Kabelliste",                 rev:"C", datum:"20.05.2026", seiten:1},
+                    {nr:"L-001", titel:"Lageplan Halle",             rev:"A", datum:"03.03.2026", seiten:1},
+                    {nr:"M-001", titel:"Maßzeichnung Schaltschrank", rev:"B", datum:"15.04.2026", seiten:3},
+                  ];
+                  return (
+                    <div className="mat-sheet-overlay"
+                      onClick={(e)=>{if(e.target===e.currentTarget)setShowZeichnungSheet(false);}}>
+                      <div className="mat-sheet">
+                        <div className="sheet-handle"/>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px 10px"}}>
+                          <div>
+                            <div style={{fontSize:17,fontWeight:700,color:IOS.label,letterSpacing:-0.3}}>Zeichnungen</div>
+                            <div style={{fontSize:12,color:IOS.label3,marginTop:1}}>ID {a.anlage} · {a.kunde}</div>
+                          </div>
+                          <button onClick={()=>setShowZeichnungSheet(false)} style={{
+                            border:"none",background:"rgba(0,0,0,0.07)",
+                            width:30,height:30,borderRadius:15,
+                            fontSize:15,color:IOS.label2,cursor:"pointer",
+                            display:"flex",alignItems:"center",justifyContent:"center",
+                          }}>✕</button>
+                        </div>
+                        <div style={{height:"0.5px",background:"rgba(0,0,0,0.08)"}}/>
+                        {sheets.map((s,i)=>(
+                          <div key={i} className="mat-item-row" style={{alignItems:"flex-start",gap:12}}>
+                            <div style={{
+                              width:36,height:42,borderRadius:8,
+                              background:"rgba(189,189,0,0.1)",border:`1px solid ${CD}44`,
+                              display:"flex",flexDirection:"column",alignItems:"center",
+                              justifyContent:"center",flexShrink:0,gap:1,
+                            }}>
+                              <span style={{fontSize:13}}>📄</span>
+                              <span style={{fontSize:8,color:CD,fontWeight:700,letterSpacing:0.3}}>PDF</span>
+                            </div>
+                            <div style={{flex:1,paddingTop:2}}>
+                              <div style={{fontSize:14,fontWeight:600,color:IOS.label,letterSpacing:-0.2}}>{s.titel}</div>
+                              <div style={{fontSize:11,color:IOS.label3,marginTop:2,fontFamily:IOS.mono}}>
+                                {s.nr} · Rev. {s.rev} · {s.seiten} {s.seiten===1?"Seite":"Seiten"}
+                              </div>
+                              <div style={{fontSize:11,color:IOS.label3,marginTop:1}}>{s.datum}</div>
+                            </div>
+                            <div style={{
+                              fontSize:11,fontWeight:600,padding:"3px 9px",borderRadius:8,
+                              background:"rgba(189,189,0,0.12)",color:CD,marginTop:4,flexShrink:0,
+                            }}>öffnen</div>
+                          </div>
+                        ))}
+                        <div style={{margin:"10px 20px 0",padding:"10px 14px",background:"rgba(189,189,0,0.08)",borderRadius:10,
+                          display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{fontSize:13,color:IOS.label2,fontWeight:500}}>Dokumente gesamt</span>
+                          <span style={{fontFamily:IOS.mono,fontSize:15,fontWeight:700,color:CD}}>{sheets.length}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </>
+            );
+          })()}
+
+
+        </div>
+
+        {/* ── Schnell-Zeiterfassung Sheet (Auftragsdetail) ── */}
+        {showQuickEntrySheet && (
+          <div className="sheet-overlay"
+            onClick={(e)=>{ if(e.target===e.currentTarget){setShowQuickEntrySheet(false);setNewError("");} }}>
+            <div className="sheet">
+              <div className="sheet-handle"/>
+              <div className="sheet-title-row">
+                <button className="sheet-cancel" onClick={()=>{setShowQuickEntrySheet(false);setNewError("");}}>Abbrechen</button>
+                <span className="sheet-title">Neue Zeit</span>
+                <button className="sheet-done" onClick={saveNewEntry}>Sichern</button>
+              </div>
+
+              {/* Kontext: Typ + Anlage (nur anzeigen, nicht änderbar) */}
+              <div style={{
+                margin:"10px 20px 0",padding:"10px 14px",
+                background:"rgba(189,189,0,0.08)",borderRadius:12,
+                display:"flex",gap:16,
+              }}>
+                <div>
+                  <div style={{fontSize:10,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.4,marginBottom:2}}>Typ</div>
+                  <div style={{fontSize:14,fontWeight:600,color:TYPE_COLORS[newType]||CD}}>{newType}</div>
+                </div>
+                <div style={{width:"0.5px",background:"rgba(0,0,0,0.1)",alignSelf:"stretch"}}/>
+                <div>
+                  <div style={{fontSize:10,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.4,marginBottom:2}}>Anlage-ID</div>
+                  <div style={{fontSize:14,fontWeight:600,color:IOS.label}}>{newAnlage.split(" – ")[0]}</div>
+                </div>
+              </div>
+
+              {/* Start / Ende */}
+              <div style={{padding:"14px 20px 0",display:"flex",gap:12}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:11,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Startzeit</div>
+                  <label style={{display:"block",background:"#E9E9EF",borderRadius:12,padding:"12px 14px",position:"relative"}}>
+                    <div style={{fontFamily:IOS.mono,fontSize:26,fontWeight:300,color:IOS.label,letterSpacing:-1,lineHeight:1}}>
+                      {fmtHHMM(newSH,newSM)}
+                    </div>
+                    <input type="time" value={fmtHHMM(newSH,newSM)}
+                      onChange={(e)=>{ const [h,m]=e.target.value.split(":").map(Number); setNewSH(h); setNewSM(m); setNewError(""); }}
+                      style={{position:"absolute",inset:0,opacity:0,width:"100%",height:"100%",cursor:"pointer"}}/>
+                  </label>
+                </div>
+                <div style={{display:"flex",alignItems:"center",paddingTop:8}}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.2)" strokeWidth="2" strokeLinecap="round">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                  </svg>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:11,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Endzeit</div>
+                  <label style={{display:"block",background:"#E9E9EF",borderRadius:12,padding:"12px 14px",position:"relative"}}>
+                    <div style={{fontFamily:IOS.mono,fontSize:26,fontWeight:300,color:IOS.label,letterSpacing:-1,lineHeight:1}}>
+                      {fmtHHMM(newEH,newEM)}
+                    </div>
+                    <input type="time" value={fmtHHMM(newEH,newEM)}
+                      onChange={(e)=>{ const [h,m]=e.target.value.split(":").map(Number); setNewEH(h); setNewEM(m); setNewError(""); }}
+                      style={{position:"absolute",inset:0,opacity:0,width:"100%",height:"100%",cursor:"pointer"}}/>
+                  </label>
+                </div>
+              </div>
+
+              {/* Dauer */}
+              {(newEH*60+newEM) > (newSH*60+newSM) && (
+                <div style={{textAlign:"center",marginTop:6}}>
+                  <span style={{fontFamily:IOS.mono,fontSize:13,color:IOS.label3}}>
+                    Dauer: {fmtHM((newEH*60+newEM-(newSH*60+newSM))*60)}
+                  </span>
+                </div>
+              )}
+
+              {/* Kommentar */}
+              <div style={{padding:"14px 20px 0"}}>
+                <div style={{fontSize:11,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Kommentar (optional)</div>
+                <div style={{background:"#E9E9EF",borderRadius:12,padding:"12px 14px"}}>
+                  <input value={newNote} onChange={e=>setNewNote(e.target.value)}
+                    placeholder="Notiz eingeben…"
+                    style={{background:"none",border:"none",width:"100%",fontSize:15,
+                      fontFamily:IOS.font,color:IOS.label,outline:"none"}}/>
+                </div>
+              </div>
+
+              {newError && <div className="edit-error-box" style={{margin:"12px 20px 0"}}>&#9888; {newError}</div>}
+              <div style={{height:20}}/>
+            </div>
+          </div>
+        )}
+
+        {/* ── Neue Zeit Sheet ── */}
+        {showNewEntrySheet && (
+          <div className="sheet-overlay"
+            onClick={(e)=>{ if(e.target===e.currentTarget){setShowNewEntrySheet(false);setNewError("");} }}>
+            <div className="sheet" style={{maxHeight:"85%",overflowY:"auto"}}>
+              <div className="sheet-handle"/>
+              <div className="sheet-title-row">
+                <button className="sheet-cancel" onClick={()=>{setShowNewEntrySheet(false);setNewError("");}}>Abbrechen</button>
+                <span className="sheet-title">Neue Zeit</span>
+                <button className="sheet-done" onClick={saveNewEntry}>Sichern</button>
+              </div>
+
+              {/* Arbeitszeittyp */}
+              <div style={{padding:"12px 20px 0"}}>
+                <div style={{fontSize:11,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Arbeitszeittyp</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}}>
+                  {TYPES.map(t => (
+                    <div key={t} onClick={()=>setNewType(t)} style={{
+                      display:"flex",alignItems:"center",gap:7,
+                      padding:"9px 12px",borderRadius:10,cursor:"pointer",
+                      background: newType===t ? TYPE_COLORS[t]+"22" : "rgba(0,0,0,0.04)",
+                      border: `1.5px solid ${newType===t ? TYPE_COLORS[t] : "transparent"}`,
+                    }}>
+                      <span style={{fontFamily:"monospace",fontSize:13,fontWeight:800,color:TYPE_COLORS[t]}}>{TYPE_ICONS[t]}</span>
+                      <span style={{fontSize:13,fontWeight:500,color:newType===t?TYPE_COLORS[t]:IOS.label2}}>{t}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Start / Ende */}
+              <div style={{padding:"14px 20px 0",display:"flex",gap:12}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:11,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Startzeit</div>
+                  <label style={{display:"block",background:"#E9E9EF",borderRadius:12,padding:"12px 14px",position:"relative"}}>
+                    <div style={{fontFamily:IOS.mono,fontSize:26,fontWeight:300,color:IOS.label,letterSpacing:-1,lineHeight:1}}>
+                      {fmtHHMM(newSH,newSM)}
+                    </div>
+                    <input type="time" value={fmtHHMM(newSH,newSM)}
+                      onChange={(e)=>{ const [h,m]=e.target.value.split(":").map(Number); setNewSH(h); setNewSM(m); setNewError(""); }}
+                      style={{position:"absolute",inset:0,opacity:0,width:"100%",height:"100%",cursor:"pointer"}}/>
+                  </label>
+                </div>
+                <div style={{display:"flex",alignItems:"center",paddingTop:8}}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.2)" strokeWidth="2" strokeLinecap="round">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                  </svg>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:11,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Endzeit</div>
+                  <label style={{display:"block",background:"#E9E9EF",borderRadius:12,padding:"12px 14px",position:"relative"}}>
+                    <div style={{fontFamily:IOS.mono,fontSize:26,fontWeight:300,color:IOS.label,letterSpacing:-1,lineHeight:1}}>
+                      {fmtHHMM(newEH,newEM)}
+                    </div>
+                    <input type="time" value={fmtHHMM(newEH,newEM)}
+                      onChange={(e)=>{ const [h,m]=e.target.value.split(":").map(Number); setNewEH(h); setNewEM(m); setNewError(""); }}
+                      style={{position:"absolute",inset:0,opacity:0,width:"100%",height:"100%",cursor:"pointer"}}/>
+                  </label>
+                </div>
+              </div>
+
+              {/* Dauer-Vorschau */}
+              {(newEH*60+newEM) > (newSH*60+newSM) && (
+                <div style={{textAlign:"center",marginTop:6}}>
+                  <span style={{fontFamily:IOS.mono,fontSize:13,color:IOS.label3}}>
+                    Dauer: {fmtHM((newEH*60+newEM-(newSH*60+newSM))*60)}
+                  </span>
+                </div>
+              )}
+
+              {/* Anlage-ID */}
+              <div style={{padding:"14px 20px 0"}}>
+                <div style={{fontSize:11,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Anlage-ID</div>
+                <div style={{background:"#E9E9EF",borderRadius:12,padding:"2px 14px",position:"relative"}}>
+                  <select value={newAnlage} onChange={e=>setNewAnlage(e.target.value)} style={{
+                    background:"none",border:"none",width:"100%",padding:"12px 0",
+                    fontSize:15,fontFamily:IOS.font,color:newAnlage===ANLAGEN[0]?IOS.label2:IOS.label,
+                    outline:"none",cursor:"pointer",appearance:"none",WebkitAppearance:"none",
+                  }}>
+                    {ANLAGEN.map(a=><option key={a} value={a}>{a}</option>)}
+                  </select>
+                  <span style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",color:IOS.label3,pointerEvents:"none",fontSize:13}}>▾</span>
+                </div>
+              </div>
+
+              {/* Kommentar */}
+              <div style={{padding:"14px 20px 0"}}>
+                <div style={{fontSize:11,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Kommentar (optional)</div>
+                <div style={{background:"#E9E9EF",borderRadius:12,padding:"12px 14px"}}>
+                  <input
+                    value={newNote}
+                    onChange={e=>{setNewNote(e.target.value);}}
+                    placeholder="Notiz eingeben…"
+                    style={{background:"none",border:"none",width:"100%",fontSize:15,
+                      fontFamily:IOS.font,color:IOS.label,outline:"none"}}
+                  />
+                </div>
+              </div>
+
+              {newError && <div className="edit-error-box" style={{margin:"12px 20px 0"}}>⚠ {newError}</div>}
+              <div style={{height:20}}/>
+            </div>
+          </div>
+        )}
+
+        {/* ── Edit Sheet ── nativer iOS time-input */}
+        {editEntry && (
+          <div className="sheet-overlay"
+            onClick={(e)=>{ if(e.target===e.currentTarget){setEditEntry(null);setEditError("");} }}>
+            <div className="sheet">
+              <div className="sheet-handle"/>
+              <div className="sheet-title-row">
+                <button className="sheet-cancel"
+                  onClick={()=>{setEditEntry(null);setEditError("");}}>Abbrechen</button>
+                <span className="sheet-title">Zeit bearbeiten</span>
+                <button className="sheet-done" onClick={saveEdit}>Sichern</button>
+              </div>
+              <div style={{padding:"6px 20px 0",display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontFamily:"monospace",fontSize:16,fontWeight:800,
+                  color:TYPE_COLORS[editEntry.type]}}>{TYPE_ICONS[editEntry.type]}</span>
+                <span style={{fontSize:14,color:IOS.label2}}>{editEntry.type}</span>
+                {editEntry.note!=="–" && <span style={{fontSize:14,color:IOS.label3}}>· {editEntry.note}</span>}
+              </div>
+              <div style={{display:"flex",gap:12,padding:"16px 20px 8px"}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:11,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Startzeit</div>
+                  <label style={{display:"block",background:"#E9E9EF",borderRadius:12,padding:"14px 16px",position:"relative"}}>
+                    <div style={{fontFamily:IOS.mono,fontSize:28,fontWeight:300,color:IOS.label,letterSpacing:-1,lineHeight:1}}>
+                      {fmtHHMM(editSH,editSM)}
+                    </div>
+                    <input type="time" value={fmtHHMM(editSH,editSM)}
+                      onChange={(e)=>{ const [h,m]=e.target.value.split(":").map(Number); setEditSH(h); setEditSM(m); setEditError(""); }}
+                      style={{position:"absolute",inset:0,opacity:0,width:"100%",height:"100%",cursor:"pointer"}}/>
+                  </label>
+                  <div style={{fontSize:11,color:IOS.label3,textAlign:"center",marginTop:4}}>Tippen zum Ändern</div>
+                </div>
+                <div style={{display:"flex",alignItems:"center",paddingTop:8}}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.25)" strokeWidth="2" strokeLinecap="round">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                  </svg>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:11,color:IOS.label3,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Endzeit</div>
+                  <label style={{display:"block",background:"#E9E9EF",borderRadius:12,padding:"14px 16px",position:"relative"}}>
+                    <div style={{fontFamily:IOS.mono,fontSize:28,fontWeight:300,color:IOS.label,letterSpacing:-1,lineHeight:1}}>
+                      {fmtHHMM(editEH,editEM)}
+                    </div>
+                    <input type="time" value={fmtHHMM(editEH,editEM)}
+                      onChange={(e)=>{ const [h,m]=e.target.value.split(":").map(Number); setEditEH(h); setEditEM(m); setEditError(""); }}
+                      style={{position:"absolute",inset:0,opacity:0,width:"100%",height:"100%",cursor:"pointer"}}/>
+                  </label>
+                  <div style={{fontSize:11,color:IOS.label3,textAlign:"center",marginTop:4}}>Tippen zum Ändern</div>
+                </div>
+              </div>
+              <div style={{margin:"4px 20px 0",padding:"12px 16px",background:"rgba(189,189,0,0.08)",borderRadius:12,
+                display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:13,color:IOS.label2}}>Dauer</span>
+                <span style={{fontFamily:IOS.mono,fontSize:17,fontWeight:600,
+                  color:(editEH*60+editEM)>(editSH*60+editSM)?CD:IOS.red}}>
+                  {(editEH*60+editEM)>(editSH*60+editSM)
+                    ? fmtHM((editEH*60+editEM-(editSH*60+editSM))*60)
+                    : "⚠ Ungültig"}
+                </span>
+              </div>
+              {editError && <div className="edit-error-box">⚠ {editError}</div>}
+              <div style={{height:16}}/>
+            </div>
+          </div>
+        )}
+
+        {/* Tab Bar */}
+        <div className="ios-tabbar">
+          {[
+            {key:"home",      label:"Home",      svg:(active)=>(
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active?CD:"rgba(0,0,0,0.3)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"/>
+                <path d="M9 21V12h6v9"/>
+              </svg>
+            )},
+            {key:"auftraege", label:"Aufträge",  svg:(active)=>(
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active?CD:"rgba(0,0,0,0.3)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                <path d="M16 2v4M8 2v4M3 10h18"/>
+                <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>
+              </svg>
+            )},
+            {key:"timer",     label:"Timer",     svg:(active)=>(
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active?CD:"rgba(0,0,0,0.3)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="13" r="8"/>
+                <path d="M12 9v4l3 3"/>
+                <path d="M9.5 2.5h5M12 2.5V5"/>
+              </svg>
+            )},
+            {key:"log",       label:"Zeiten",  svg:(active)=>(
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active?CD:"rgba(0,0,0,0.3)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+                <rect x="9" y="3" width="6" height="4" rx="1"/>
+                <path d="M9 12h6M9 16h4"/>
+              </svg>
+            )},
+            {key:"stats",     label:"Auswertung",svg:(active)=>(
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active?CD:"rgba(0,0,0,0.3)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 20V10M12 20V4M6 20v-6"/>
+              </svg>
+            )},
+          ].map(({key,label,svg})=>(
+            <button key={key} className="ios-tab" onClick={()=>{setTab(key);if(key!=="auftraege"){setSelectedAuftrag(null);setSubPage(null);setShowMaterialSheet(false);}}}>
+              <span className="ios-tab-icon" style={{lineHeight:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {svg(tab===key)}
+              </span>
+              <span className="ios-tab-label" style={{
+                color: tab===key ? CD : "rgba(0,0,0,0.35)",
+              }}>{label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<ZeiterfassungApp />);
+  </script>
+</body>
+</html>
